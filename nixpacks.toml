@@ -1,0 +1,6 @@
+# nixpacks.toml
+
+[phases.setup]
+# 'aptPks'는 Railway의 리눅스(Debian) 환경에 시스템 패키지를 설치하라는 명령어입니다.
+# 'libopenblas-dev'는 faiss-cpu와 같은 라이브러리를 컴파일하는 데 필요한 '특별 공구'입니다.
+aptPks = ["libopenblas-dev"]
