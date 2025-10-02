@@ -261,26 +261,26 @@
                 const sourceElement = document.getElementById('sourceLink');
                 const sourceText = getSection('5. 관련 자료 출처');
                 
-                sourceElement.innerHTML = ''; // 이전 내용을 깨끗하게 비웁니다.
+                sourceElement.innerHTML = ''; 
 
-                // '사례 원문 바로가기(https...)' 와 같은 형식을 찾는 정규식
+                
                 const linkRegex = /(.*?)\((https?:\/\/.+)\)/;
                 const match = sourceText.match(linkRegex);
 
                 if (match) {
-                    // 정규식이 일치하는 경우 (예: "사례 원문 바로가기(https://...)")
-                    const linkText = match[1].trim(); // "(https..." 앞의 텍스트
-                    const linkUrl = match[2];     // "https..." 부분
+                    
+                    const linkText = match[1].trim(); 
+                    const linkUrl = match[2];     
                     
                     const a = document.createElement('a');
                     a.href = linkUrl;
-                    a.textContent = linkText || '링크'; // 텍스트가 없으면 '링크'라고 표시
+                    a.textContent = linkText || '링크'; 
                     a.target = '_blank';
                     a.rel = 'noopener noreferrer';
                     sourceElement.appendChild(a);
                     
                 } else {
-                    // 정규식이 일치하지 않으면, 그냥 텍스트만 표시합니다.
+                    
                     sourceElement.textContent = sourceText;
                 }
             } catch (e) {
@@ -289,7 +289,6 @@
             }
         };
 
-        // ▼▼▼ [수정] UI 초기화 함수를 두 종류로 분리 ▼▼▼
 
         // '다시 시작' 버튼을 위한 완전 초기화 함수
         const fullResetUI = () => {
@@ -311,9 +310,8 @@
             dangerReportContainer.style.display = 'none';
             alertBox.className = 'alert-box safe';
             alertBox.textContent = '안전';
-            // 여기서는 uploadForm.reset()을 호출하지 않습니다!
         };
-        // ▲▲▲ [수정] UI 초기화 함수를 두 종류로 분리 ▲▲▲
+
 
         uploadForm.onsubmit = async (event) => {
             event.preventDefault();
@@ -354,10 +352,10 @@
             }
         };
 
-        // ▼▼▼ [수정] 각 이벤트에 맞는 초기화 함수를 연결 ▼▼▼
+
         resetButton.addEventListener('click', fullResetUI);
         audioFile.addEventListener('change', clearPreviousResults);
-        // ▲▲▲ [수정] 각 이벤트에 맞는 초기화 함수를 연결 ▲▲▲
+
 
     </script>
 </body>
