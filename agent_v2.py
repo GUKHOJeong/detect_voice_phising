@@ -17,7 +17,6 @@ from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
 from dotenv import load_dotenv
 import cohere
-import asyncio  # 변경점: asyncio 임포트
 import asyncio
 from typing import TypedDict, List, Dict, Any, TYPE_CHECKING
 from langchain_core.callbacks import BaseCallbackHandler
@@ -26,13 +25,12 @@ from langchain_openai import ChatOpenAI
 
 if TYPE_CHECKING:
     from main import ConnectionManager
-# --- 1. 환경 설정 및 전역 리소스 초기화 ---
 load_dotenv()
 open_api = os.getenv("openai")
 llm = ChatOpenAI(model="gpt-5", temperature=0, api_key=open_api)
 embeddings = OpenAIEmbeddings(model="text-embedding-3-large", api_key=open_api)
 
-# SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 try:
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 except NameError:
@@ -74,39 +72,8 @@ class FastAPIAlertCallback(BaseCallbackHandler):
                 "payload": {"level": alert_signal, "message": message},
             }
 
-            # 별도 스레드에서 메인 스레드로 작업을 안전하게 보냅니다.
             asyncio.run_coroutine_threadsafe(self.manager.broadcast(payload), self.loop)
             print(f"✅ [Callback/별도 스레드] 신호 전송 요청: {payload}")
-
-
-# class FastAPIAlertCallback(BaseCallbackHandler):
-#     """'danger' 노드 결과에 따라 FastAPI를 통해 프론트엔드에 신호를 보냅니다."""
-
-#     def __init__(self, manager: "ConnectionManager"):
-#         # main.py의 웹소켓 매니저 객체를 직접 주입받습니다.
-#         self.manager = manager
-
-#     def on_chain_end(self, outputs: Dict[str, Any], **kwargs: Any) -> None:
-#         # danger 노드가 끝났을 때만 반응합니다.
-#         if "dangerous" in outputs:
-#             level = outputs["dangerous"]
-
-#             # 프론트엔드에 보낼 신호 (0: 정상, 1: 위험)
-#             alert_signal = 1 if "위험군" in level else 0
-#             message = "위험 감지" if alert_signal == 1 else "안전"
-
-#             payload = {
-#                 "type": "ALERT",
-#                 "payload": {"level": alert_signal, "message": message},
-#             }
-
-#             try:
-#                 # 현재 실행 중인 비동기 이벤트 루프를 찾아 작업을 예약합니다.
-#                 loop = asyncio.get_running_loop()
-#                 loop.create_task(self.manager.broadcast(payload))
-#                 print(f"✅ [Callback] 프론트엔드로 신호 전송 예약: {payload}")
-#             except RuntimeError:
-#                 asyncio.run(self.manager.broadcast(payload))
 
 
 # --- 2. LangGraph 상태 및 Pydantic 모델 정의 ---
@@ -146,11 +113,9 @@ class EmotionAnalysisResult(BaseModel):
     summary: str = Field(description="분석 결과에 대한 최종 요약")
 
 
-# 변경점: Cohere 클라이언트를 비동기(AsyncClient)로 초기화
 co = cohere.AsyncClient(os.getenv("api_key"))
 
 
-# 변경점: reranker 함수를 async def로 전환
 async def reranker(input_query: str, context_docs: List[Document]) -> List[Document]:
     """Cohere Reranker를 사용하여 Document 리스트를 재정렬하고 상위 결과를 Document 리스트로 반환합니다."""
     print("  - Executing Reranker...")
@@ -159,7 +124,6 @@ async def reranker(input_query: str, context_docs: List[Document]) -> List[Docum
 
     doc_contents = [doc.page_content for doc in context_docs]
 
-    # 변경점: co.rerank를 await으로 비동기 호출
     reranked_results = await co.rerank(
         model="rerank-multilingual-v3.0",
         query=input_query,
@@ -181,7 +145,6 @@ async def reranker(input_query: str, context_docs: List[Document]) -> List[Docum
 
 
 # --- 3. LangGraph 노드 정의 ---
-# 변경점: danger 함수를 async def로 전환, chain.invoke -> await chain.ainvoke
 async def danger(state: State):
     print("Executing Node: danger")
 
@@ -205,7 +168,6 @@ async def danger(state: State):
 # 변경점: retrive 함수를 async def로 전환 및 비동기 호출 사용
 async def retrive(state: State):
     print("Executing Node: retrive")
-    # ... (리트리버 설정은 동일) ...
     bm25_old_retriever.k = 5
     old_retriever = loaded_vector_db.as_retriever(
         search_type="similarity_score_threshold",
@@ -223,7 +185,6 @@ async def retrive(state: State):
         retrievers=[bm25_new_retriever, new_retriever], weights=[0.5, 0.5]
     )
 
-    # 변경점: retriever.invoke -> await retriever.ainvoke
     old_docs_results, new_docs_results = await asyncio.gather(
         old_retriever.ainvoke(state["summarize"]),
         new_retriever.ainvoke(state["summarize"]),
@@ -233,7 +194,7 @@ async def retrive(state: State):
 
     if not old_docs and not new_docs:
         print("-> 검색된 문서가 없습니다.")
-        return {"dangerous": "안전군"}  # 상태를 '안전군'으로 변경하여 라우팅에 사용
+        return {"dangerous": "안전군"}
 
     if not new_docs:
         print("-> 이전 방식의 문서만 검색되었습니다.")
@@ -260,7 +221,6 @@ async def retrive(state: State):
         }
 
     print("-> 이전 방식과 최신 방식의 문서가 모두 검색되었습니다. 점수를 비교합니다.")
-    # 변경점: co.rerank 비동기 호출
     old_rerank_scores, new_rerank_scores = await asyncio.gather(
         co.rerank(
             model="rerank-multilingual-v3.0",
@@ -307,7 +267,6 @@ async def retrive(state: State):
         }
 
 
-# 변경점: emotion_analysis_node를 async def로 전환, chain.invoke -> await chain.ainvoke
 async def emotion_analysis_node(state: State):
     print("Executing Node: emotion_analysis")
     parser = JsonOutputParser(pydantic_object=EmotionAnalysisResult)
@@ -325,14 +284,12 @@ async def emotion_analysis_node(state: State):
     return {"emotion_control": analysis_result}
 
 
-# 변경점: info 함수를 async def로 전환, chain.invoke -> await chain.ainvoke
 async def info(state: State):
     print("Executing Node: info")
 
     retrieved_docs = state.get("retrive_result")
     retrieved_meta = state.get("retrive_source")
 
-    # 검색 결과가 없을 경우를 대비한 방어 코드
     if not retrieved_docs or not retrieved_meta:
         return {"crime_info": "검색된 관련 사례가 없어 상세 분석을 진행할 수 없습니다."}
 
@@ -368,7 +325,6 @@ async def info(state: State):
         else "탐지된 주요 심리 조작 기법이 없습니다."
     )
 
-    # ✅ 사용자님의 새 아이디어를 반영하여 수정한 프롬프트
     final_prompt_template = """당신은 보이스피싱 패턴과 범죄 심리를 모두 분석하는 통합 분석 전문가입니다.
     주어진 정보들을 종합적으로 검토하여, 아래 형식에 맞춰 최종 분석 보고서를 작성합니다.
 
@@ -411,7 +367,6 @@ async def info(state: State):
 
 
 # --- 4. LangGraph 그래프 구성 및 라우팅 함수 ---
-# 변경점: 라우팅 함수를 명확한 이름으로 변경
 def should_proceed_to_analysis(state: State):
     if state["dangerous"] == "위험군":
         print("-> '위험군'으로 판단. RAG 및 심리 분석을 병렬 실행합니다.")
@@ -430,7 +385,6 @@ def route_after_retrieval(state: State):
         return "proceed"
 
 
-# 변경점: 논의된 최종 그래프 구조로 재구성
 graph = StateGraph(State)
 graph.add_node("danger", danger)
 graph.add_node("retrive", retrive)
